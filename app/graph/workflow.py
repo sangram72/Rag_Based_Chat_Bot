@@ -12,36 +12,40 @@ from app.graph.nodes import (
 )
 
 
-# Decide what happens after citation validation
+MAX_GENERATION_ATTEMPTS = 2
+
+
 def validation_router(state):
-    if state["is_valid"]:
+
+    # Stop when citations are valid.
+    if state.get("is_valid", False):
         return END
 
+    # Prevent endless regeneration.
+    if state.get("generation_attempts", 0) >= MAX_GENERATION_ATTEMPTS:
+        return END
+
+    # Retry once if citations are invalid.
     return "generate"
 
 
-# Create the LangGraph workflow
 def create_workflow():
 
     graph = StateGraph(ChatState)
 
-    # Register nodes
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("check_retrieval", check_retrieval_node)
     graph.add_node("generate", generate_node)
     graph.add_node("validate", validate_node)
 
-    # Step 1: Start retrieval
     graph.add_edge(START, "retrieve")
 
-    # Step 2: Check retrieved documents
     graph.add_edge("retrieve", "check_retrieval")
 
-    # Step 3: Decide whether to generate an answer
     graph.add_conditional_edges(
         "check_retrieval",
         lambda state: (
-            END if not state["documents"] else "generate"
+            END if not state.get("documents") else "generate"
         ),
         {
             END: END,
@@ -49,10 +53,8 @@ def create_workflow():
         }
     )
 
-    # Step 4: Generate answer
     graph.add_edge("generate", "validate")
 
-    # Step 5: Validate citations
     graph.add_conditional_edges(
         "validate",
         validation_router,
@@ -62,5 +64,6 @@ def create_workflow():
         }
     )
 
-    # Compile with SQLite checkpointing
-    return graph.compile(checkpointer=checkpointer)
+    return graph.compile(
+        checkpointer=checkpointer
+    )

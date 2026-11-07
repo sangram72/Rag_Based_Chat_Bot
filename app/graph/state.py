@@ -2,9 +2,17 @@ from typing import TypedDict, List, Any
 from langgraph.graph import MessagesState
 
 
+
+
+
+
 class ChatState(MessagesState):
     question: str
-    documents: List[Any]
+    documents: list
     answer: str
-    citations: List[dict]
+    citations: list
     is_valid: bool
+    generation_attempts: int
+
+
+   

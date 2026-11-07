@@ -1,54 +1,71 @@
+
 from langchain_ollama import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
+
 
 llm = ChatOllama(
     model="llama3.2:3b",
     temperature=0
 )
 
-system_prompt = """
-You are a document-based AI assistant.
 
-Answer only using the provided document context.
+SYSTEM_PROMPT = """
+You are a document-based RAG assistant.
 
-Use previous conversation messages to understand follow-up questions.
+RULES:
 
-Every factual claim must include a citation in this format:
+1. Answer questions using ONLY the provided document context.
+2. Do not use external knowledge or invent information.
+3. Every factual claim must have a supporting citation.
+4. Use the exact source numbers provided in the context.
+5. Never change, guess, or invent source numbers.
+6. Do not cite a source unless its content supports the claim.
+7. If the answer is unavailable in the documents, clearly say so.
+8. Keep answers clear and concise.
+9. Do not claim that something is inferred when it is not explicitly supported.
+10. Do not create quotations that differ from the document text.
+
+CITATION FORMAT:
+
+Use this exact format:
+
 [Source 0]
+[Source 1]
 
-Only use source IDs provided in the current document context.
-
-If the answer is unavailable, say:
-"I could not find sufficient information in the provided documents."
-
-Never invent information or citations.
-
-Document context:
-{context}
+Only use source IDs present in the supplied context.
 """
+
 
 def generate_answer(question, documents, chat_history=None):
 
-    if chat_history is None:
-        chat_history = []
+    context = ""
 
-    context = "\n\n".join(
-        [
-            f"[Source {index}]\n{doc.page_content}"
-            for index, doc in enumerate(documents)
-        ]
-    )
+    for index, document in enumerate(documents):
+
+        metadata = document.metadata or {}
+
+        context += f"""
+[Source {index}]
+Filename: {metadata.get("filename", metadata.get("source", "Unknown"))}
+Page: {metadata.get("page", "Unknown")}
+Content:
+{document.page_content}
+
+-------------------------
+"""
 
     messages = [
         SystemMessage(
-            content=system_prompt.format(context=context)
+            content=SYSTEM_PROMPT + "\n\nDOCUMENT CONTEXT:\n" + context
         )
     ]
 
-    messages.extend(chat_history)
+    if chat_history:
 
-    from langchain_core.messages import HumanMessage
+        for message in chat_history:
+
+            if getattr(message, "type", None) in ["human", "ai"]:
+                messages.append(message)
 
     messages.append(
         HumanMessage(content=question)
